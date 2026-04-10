@@ -1,0 +1,19 @@
+# Logs
+*.log
+honeypot_alerts.log
+honeypot.log
+
+# IOC data
+iocs.txt
+
+# GeoIP database
+*.mmdb
+
+# RDP TLS certificate and key
+rdp_cert.pem
+rdp_key.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/

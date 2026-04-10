@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Honeypot Dashboard — Login</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#060a14;
+    color:#e2e8f0;
+    font-family:'Courier New',monospace;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    position:relative;
+  }
+  canvas{position:fixed;top:0;left:0;z-index:0;opacity:.18}
+  .card{
+    position:relative;z-index:1;
+    background:rgba(13,20,40,.92);
+    border:1px solid #1e3a5f;
+    border-radius:12px;
+    padding:40px 48px;
+    width:400px;
+    box-shadow:0 0 60px rgba(0,180,255,.08),0 0 0 1px rgba(0,180,255,.05);
+  }
+  .logo{
+    text-align:center;margin-bottom:32px;
+  }
+  .logo .icon{
+    font-size:40px;margin-bottom:8px;
+    filter:drop-shadow(0 0 12px #00d4ff);
+  }
+  .logo h1{
+    font-size:1.4rem;letter-spacing:3px;
+    background:linear-gradient(135deg,#00d4ff,#00ff88);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    text-transform:uppercase;
+  }
+  .logo p{color:#4a6fa5;font-size:.75rem;letter-spacing:2px;margin-top:4px}
+  label{display:block;font-size:.72rem;color:#4a6fa5;letter-spacing:1.5px;margin-bottom:6px;text-transform:uppercase}
+  input{
+    width:100%;background:#0a1628;border:1px solid #1e3a5f;border-radius:6px;
+    color:#e2e8f0;padding:12px 14px;font-family:inherit;font-size:.9rem;
+    outline:none;transition:.2s;
+  }
+  input:focus{border-color:#00d4ff;box-shadow:0 0 0 3px rgba(0,212,255,.1)}
+  .field{margin-bottom:20px}
+  .btn{
+    width:100%;padding:14px;border:none;border-radius:6px;cursor:pointer;
+    background:linear-gradient(135deg,#0066cc,#004499);
+    color:#fff;font-family:inherit;font-size:.95rem;letter-spacing:2px;
+    text-transform:uppercase;transition:.2s;
+    box-shadow:0 4px 20px rgba(0,100,200,.3);
+  }
+  .btn:hover{background:linear-gradient(135deg,#0088ff,#0055cc);box-shadow:0 4px 30px rgba(0,150,255,.4)}
+  .error{
+    background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.3);
+    color:#ff6b6b;border-radius:6px;padding:10px 14px;font-size:.82rem;
+    margin-bottom:20px;text-align:center;
+  }
+  .tagline{text-align:center;margin-top:24px;font-size:.7rem;color:#2a4060;letter-spacing:1px}
+  .scanline{
+    position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="scanline"></div>
+<div class="card">
+  <div class="logo">
+    <div class="icon">🎯</div>
+    <h1>HoneyWatch</h1>
+    <p>Threat Intelligence Dashboard</p>
+  </div>
+  {% if error %}
+  <div class="error">⚠ {{ error }}</div>
+  {% endif %}
+  <form method="POST" action="/login">
+    <div class="field">
+      <label>Username</label>
+      <input type="text" name="username" autofocus autocomplete="username" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" name="password" autocomplete="current-password">
+    </div>
+    <button class="btn" type="submit">Authenticate</button>
+  </form>
+  <p class="tagline">// Defensive Security Platform v1.0</p>
+</div>
+
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+c.width = window.innerWidth; c.height = window.innerHeight;
+const cols = Math.floor(c.width / 16);
+const drops = Array(cols).fill(1);
+const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ';
+function draw(){
+  ctx.fillStyle='rgba(6,10,20,.05)';
+  ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#00d4ff';
+  ctx.font='13px monospace';
+  drops.forEach((y,i)=>{
+    const t=chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillText(t, i*16, y*16);
+    if(y*16>c.height && Math.random()>.975) drops[i]=0;
+    drops[i]++;
+  });
+}
+setInterval(draw,50);
+window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.innerHeight});
+</script>
+</body>
+</html>

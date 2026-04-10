@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoneyWatch — Fleet Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#060a14;--surface:#0c1526;--card:#0f1c34;--border:#1a2f50;
+  --text:#cdd6f4;--muted:#4a6fa5;--accent:#00d4ff;--green:#00ff88;
+  --red:#ff4757;--orange:#ffa502;--purple:#a78bfa;--yellow:#f1c40f;
+  --sidebar:220px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+#sidebar{width:var(--sidebar);flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100}
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
+.sb-logo .icon{font-size:22px}
+.sb-logo h1{font-size:.95rem;letter-spacing:2px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-transform:uppercase;margin-top:4px}
+.sb-logo p{font-size:.65rem;color:var(--muted);letter-spacing:1px;margin-top:2px}
+nav{flex:1;padding:12px 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-left:3px solid transparent;transition:.15s;color:var(--muted);font-size:.85rem;user-select:none}
+.nav-item:hover{background:rgba(0,212,255,.05);color:var(--text)}
+.nav-item.active{border-left-color:var(--accent);background:rgba(0,212,255,.07);color:var(--accent)}
+.nav-item .ni{font-size:16px;width:20px;text-align:center}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;font-weight:700;min-width:18px;text-align:center}
+.nav-badge.green{background:var(--green);color:#000}
+.sb-footer{padding:12px 16px;border-top:1px solid var(--border)}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.status-text{font-size:.72rem;color:var(--muted)}
+.logout-btn{display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;color:var(--muted);font-size:.78rem;margin-top:8px;transition:.15s}
+.logout-btn:hover{color:var(--red)}
+
+/* Main */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+#topbar .page-title{font-size:1rem;font-weight:600;flex:1}
+.topbar-stat{font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.topbar-stat span{color:var(--accent);font-weight:700;font-family:monospace}
+#refresh-btn{background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);color:var(--accent);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.75rem;transition:.15s}
+#refresh-btn:hover{background:rgba(0,212,255,.2)}
+#last-updated{font-size:.68rem;color:var(--muted)}
+#content{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* Views */
+.view{display:none}.view.active{display:block}
+
+/* Stat Cards */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative;overflow:hidden;transition:.2s}
+.stat-card:hover{border-color:rgba(0,212,255,.3);box-shadow:0 0 20px rgba(0,212,255,.05)}
+.stat-card .label{font-size:.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.stat-card .value{font-size:2rem;font-weight:700;font-family:monospace;line-height:1}
+.stat-card .sub{font-size:.72rem;color:var(--muted);margin-top:6px}
+.stat-card .icon{position:absolute;right:16px;top:16px;font-size:28px;opacity:.2}
+.c-blue .value{color:var(--accent)}.c-green .value{color:var(--green)}
+.c-red .value{color:var(--red)}.c-orange .value{color:var(--orange)}.c-purple .value{color:var(--purple)}
+
+/* Sensor fleet cards */
+.sensor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:20px}
+.sensor-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:.2s;cursor:default}
+.sensor-card:hover{border-color:rgba(0,212,255,.3)}
+.sensor-card.online{border-left:3px solid var(--green)}
+.sensor-card.offline{border-left:3px solid #333}
+.sensor-card .sc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sensor-card .sc-name{font-weight:700;font-size:.95rem}
+.sensor-card .sc-id{font-size:.72rem;color:var(--muted);font-family:monospace}
+.sensor-card .sc-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.75rem}
+.sensor-card .sc-meta .k{color:var(--muted)}.sensor-card .sc-meta .v{font-family:monospace;text-align:right}
+.sensor-card .sc-actions{display:flex;gap:6px;margin-top:12px}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:.68rem;font-weight:700}
+.pill-online{background:rgba(0,255,136,.1);color:var(--green)}
+.pill-offline{background:rgba(74,111,165,.1);color:var(--muted)}
+.pill-blue{background:rgba(0,212,255,.1);color:var(--accent)}
+
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px}
+.chart-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.chart-card h3{font-size:.78rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.chart-card canvas{max-height:220px}
+
+/* Map */
+#map{height:calc(100vh - 140px);min-height:400px;border-radius:10px;border:1px solid var(--border);overflow:hidden}
+.leaflet-tile{filter:brightness(.85) saturate(.7) hue-rotate(180deg) invert(1)}
+.leaflet-container{background:#060a14 !important}
+.map-popup{font-family:monospace;font-size:12px;min-width:180px}
+.map-popup .ip{color:var(--accent);font-weight:700;font-size:13px}
+.map-popup .sid{color:var(--green);font-weight:700;font-size:13px}
+.map-popup .row{display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:3px 0}
+.map-popup .row:last-child{border:none}
+.map-popup .k{color:#666}
+.leaflet-popup-content-wrapper{background:#0f1c34;border:1px solid #1a2f50;color:var(--text);border-radius:8px}
+.leaflet-popup-tip{background:#0f1c34}
+
+/* Tables */
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.table-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.table-header h3{font-size:.78rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.table-filters{display:flex;gap:8px;flex-wrap:wrap}
+.filter-input{background:#0a1628;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:.78rem;outline:none;font-family:monospace;transition:.15s}
+.filter-input:focus{border-color:var(--accent)}
+.filter-select{background:#0a1628;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:.78rem;outline:none;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th{background:#0a1628;color:var(--muted);font-size:.7rem;letter-spacing:1px;text-transform:uppercase;padding:10px 14px;text-align:left;font-weight:600;position:sticky;top:0}
+td{padding:9px 14px;border-bottom:1px solid rgba(26,47,80,.5);font-size:.82rem;font-family:monospace}
+tr:hover td{background:rgba(0,212,255,.03)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.badge-ssh{background:rgba(0,212,255,.15);color:var(--accent)}
+.badge-http{background:rgba(0,255,136,.12);color:var(--green)}
+.badge-ftp{background:rgba(167,139,250,.15);color:var(--purple)}
+.badge-telnet{background:rgba(255,165,2,.15);color:var(--orange)}
+.badge-rdp{background:rgba(255,71,87,.15);color:var(--red)}
+.badge-cred{background:rgba(255,71,87,.15);color:var(--red)}
+.badge-req{background:rgba(0,255,136,.1);color:var(--green)}
+.badge-conn{background:rgba(74,111,165,.15);color:#6b9adf}
+.badge-ioc{background:rgba(255,71,87,.3);color:#ff8a8a;border:1px solid rgba(255,71,87,.4)}
+.ip-link{color:var(--accent);cursor:pointer}
+.ip-link:hover{text-decoration:underline}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
+.page-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:.78rem;transition:.15s}
+.page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.page-btn:disabled{opacity:.3;cursor:default}
+.page-info{font-size:.75rem;color:var(--muted)}
+
+/* Forms / SIEM */
+.siem-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.form-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+.form-card h3{font-size:.78rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:16px}
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:.72rem;color:var(--muted);letter-spacing:1px;margin-bottom:5px;text-transform:uppercase}
+.form-input{width:100%;background:#0a1628;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-family:monospace;font-size:.85rem;outline:none;transition:.15s}
+.form-input:focus{border-color:var(--accent)}
+.form-select{width:100%;background:#0a1628;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-size:.85rem;outline:none;cursor:pointer}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.toggle{position:relative;display:inline-block;width:40px;height:22px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#1e3a5f;border-radius:22px;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#4a6fa5;border-radius:50%;transition:.3s}
+input:checked+.toggle-slider{background:var(--green)}
+input:checked+.toggle-slider:before{transform:translateX(18px);background:#fff}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:9px 18px;border:none;border-radius:6px;cursor:pointer;font-size:.8rem;font-family:inherit;font-weight:600;letter-spacing:.5px;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:linear-gradient(135deg,#0066cc,#0044aa);color:#fff}
+.btn-primary:hover{background:linear-gradient(135deg,#0080ff,#0055cc);box-shadow:0 4px 15px rgba(0,100,200,.3)}
+.btn-success{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+.btn-success:hover{background:rgba(0,255,136,.2)}
+.btn-danger{background:rgba(255,71,87,.1);color:var(--red);border:1px solid rgba(255,71,87,.2)}
+.btn-danger:hover{background:rgba(255,71,87,.2)}
+.btn-outline{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.alert{border-radius:6px;padding:10px 14px;font-size:.8rem;margin-top:12px}
+.alert-success{background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.2);color:var(--green)}
+.alert-error{background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);color:var(--red)}
+.alert-info{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:var(--accent)}
+
+/* Misc */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.list-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.list-card h3{font-size:.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+.list-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(26,47,80,.4);font-size:.8rem}
+.list-row:last-child{border:none}
+.list-row .lval{font-family:monospace;color:var(--accent)}
+.list-row .lcount{color:var(--muted);font-size:.72rem}
+.bar-bg{flex:1;height:4px;background:#1a2f50;border-radius:2px;margin:0 10px}
+.bar-fill{height:4px;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;transition:.4s}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.no-data{text-align:center;padding:40px;color:var(--muted);font-size:.85rem}
+.loading{text-align:center;padding:30px;color:var(--muted);font-size:.82rem}
+.mono{font-family:monospace}
+code{background:#0a1628;border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:.82rem;font-family:monospace;color:var(--green);word-break:break-all}
+pre.cmd{background:#0a1628;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:.8rem;color:var(--green);overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin-top:10px}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#2a4f7a}
+
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px 32px;width:480px;max-width:95vw;z-index:501}
+.modal h2{font-size:1rem;margin-bottom:20px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+@media(max-width:900px){.chart-grid,.siem-grid,.settings-grid,.two-col,.chart-grid-3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-logo">
+    <div class="icon">🎯</div>
+    <h1>HoneyWatch</h1>
+    <p>// Fleet Intelligence</p>
+  </div>
+  <nav>
+    <div class="nav-item active" data-view="overview" onclick="showView('overview',this)">
+      <span class="ni">📊</span> Overview
+    </div>
+    <div class="nav-item" data-view="sensors" onclick="showView('sensors',this)">
+      <span class="ni">📡</span> Sensors
+      <span class="nav-badge green" id="online-badge">0</span>
+    </div>
+    <div class="nav-item" data-view="map" onclick="showView('map',this)">
+      <span class="ni">🗺️</span> Attack Map
+    </div>
+    <div class="nav-item" data-view="events" onclick="showView('events',this)">
+      <span class="ni">📋</span> Events
+    </div>
+    <div class="nav-item" data-view="credentials" onclick="showView('credentials',this)">
+      <span class="ni">🔑</span> Credentials
+      <span class="nav-badge" id="cred-badge">0</span>
+    </div>
+    <div class="nav-item" data-view="siem" onclick="showView('siem',this)">
+      <span class="ni">📤</span> SIEM
+    </div>
+    <div class="nav-item" data-view="export" onclick="showView('export',this)">
+      <span class="ni">💾</span> Export
+    </div>
+    <div class="nav-item" data-view="settings" onclick="showView('settings',this)">
+      <span class="ni">⚙️</span> Settings
+    </div>
+  </nav>
+  <div class="sb-footer">
+    <div><span class="status-dot"></span><span class="status-text" id="status-text">Fleet monitoring</span></div>
+    <div class="logout-btn" onclick="window.location='/logout'">⏻ Sign out</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="topbar">
+    <div class="page-title" id="page-title">Overview</div>
+    <div class="topbar-stat">Events: <span id="tb-events">—</span></div>
+    <div class="topbar-stat">IPs: <span id="tb-ips">—</span></div>
+    <div class="topbar-stat">Sensors: <span id="tb-sensors">—</span></div>
+    <div class="topbar-stat">Creds: <span id="tb-creds">—</span></div>
+    <div id="last-updated">Never</div>
+    <button id="refresh-btn" onclick="refreshAll()">⟳ Refresh</button>
+  </div>
+  <div id="content">
+
+    <!-- OVERVIEW -->
+    <div id="view-overview" class="view active">
+      <div class="stat-grid">
+        <div class="stat-card c-blue"><div class="icon">📋</div><div class="label">Total Events</div><div class="value" id="s-total">—</div><div class="sub">All sensors</div></div>
+        <div class="stat-card c-green"><div class="icon">🌐</div><div class="label">Unique IPs</div><div class="value" id="s-ips">—</div><div class="sub">Distinct attackers</div></div>
+        <div class="stat-card c-red"><div class="icon">🔑</div><div class="label">Credentials</div><div class="value" id="s-creds">—</div><div class="sub">Captured pairs</div></div>
+        <div class="stat-card c-orange"><div class="icon">⚠️</div><div class="label">IOC Matches</div><div class="value" id="s-ioc">—</div><div class="sub">Known bad IPs</div></div>
+        <div class="stat-card c-purple"><div class="icon">📡</div><div class="label">Sensors Online</div><div class="value" id="s-sensors">—</div><div class="sub">Active sensors</div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>Attack Timeline</h3><canvas id="chart-timeline"></canvas></div>
+        <div class="chart-card"><h3>Services</h3><canvas id="chart-services"></canvas></div>
+      </div>
+      <div class="chart-grid-3">
+        <div class="chart-card"><h3>Event Types</h3><canvas id="chart-events"></canvas></div>
+        <div class="list-card"><h3>Top Countries</h3><div id="top-countries"><div class="loading">Loading…</div></div></div>
+        <div class="list-card"><h3>Top Attacker IPs</h3><div id="top-ips"><div class="loading">Loading…</div></div></div>
+      </div>
+      <div class="two-col">
+        <div class="list-card"><h3>Top Usernames</h3><div id="top-users"><div class="loading">Loading…</div></div></div>
+        <div class="list-card"><h3>Top Passwords</h3><div id="top-passwords"><div class="loading">Loading…</div></div></div>
+      </div>
+    </div>
+
+    <!-- SENSORS FLEET -->
+    <div id="view-sensors" class="view">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:.85rem;color:var(--muted)">Manage your sensor fleet — each sensor streams events to this server in real time.</div>
+        <button class="btn btn-primary" onclick="openAddSensor()">+ Add Sensor</button>
+      </div>
+      <div id="sensor-grid" class="sensor-grid"><div class="loading">Loading sensors…</div></div>
+
+      <div class="table-card" style="margin-top:4px">
+        <div class="table-header"><h3>Sensor Details</h3></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Name</th><th>Status</th><th>Last Seen</th>
+              <th>Last IP</th><th>Events</th><th>Services</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="sensors-tbody"><tr><td colspan="8" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div id="view-map" class="view">
+      <div style="display:flex;gap:12px;margin-bottom:10px;font-size:.75rem;color:var(--muted)">
+        <span><span style="color:var(--red)">●</span> Attacker IPs</span>
+        <span><span style="color:var(--accent)">◆</span> Sensor deployments</span>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <!-- EVENTS -->
+    <div id="view-events" class="view">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>Event Log</h3>
+          <div class="table-filters">
+            <input class="filter-input" id="f-ip" placeholder="Filter IP…" oninput="loadEvents(1)">
+            <select class="filter-select" id="f-sensor" onchange="loadEvents(1)">
+              <option value="">All sensors</option>
+            </select>
+            <select class="filter-select" id="f-service" onchange="loadEvents(1)">
+              <option value="">All services</option>
+              <option>SSH</option><option>HTTP</option><option>FTP</option>
+              <option>Telnet</option><option>RDP</option>
+            </select>
+            <select class="filter-select" id="f-event" onchange="loadEvents(1)">
+              <option value="">All events</option>
+              <option value="connection">connection</option>
+              <option value="credential_capture">credential_capture</option>
+              <option value="request">request</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Timestamp</th><th>Sensor</th><th>Service</th><th>Src IP</th><th>Event</th><th>Details</th><th>IOC</th></tr></thead>
+            <tbody id="events-tbody"><tr><td colspan="7" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <span class="page-info" id="events-page-info"></span>
+          <button class="page-btn" id="events-prev" onclick="loadEvents(eventsPage-1)">← Prev</button>
+          <button class="page-btn" id="events-next" onclick="loadEvents(eventsPage+1)">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREDENTIALS -->
+    <div id="view-credentials" class="view">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>Captured Credentials</h3>
+          <div class="table-filters">
+            <input class="filter-input" id="cred-search" placeholder="Search…" oninput="filterCreds()">
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Timestamp</th><th>Sensor</th><th>Service</th><th>Src IP</th><th>Country</th><th>Username</th><th>Password</th><th>Path</th></tr></thead>
+            <tbody id="creds-tbody"><tr><td colspan="8" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIEM -->
+    <div id="view-siem" class="view">
+      <div class="siem-grid">
+        <div class="form-card">
+          <h3>🔗 Webhook / HTTP</h3>
+          <div class="toggle-row"><label>Enable webhook forwarding</label><label class="toggle"><input type="checkbox" id="wh-enabled" onchange="saveSiem()"><span class="toggle-slider"></span></label></div>
+          <div class="form-row"><label>Destination type</label><select class="form-select" id="wh-type" onchange="saveSiem()"><option value="generic">Generic (POST JSON)</option><option value="splunk">Splunk HEC</option><option value="elastic">Elastic / Logstash</option></select></div>
+          <div class="form-row"><label>URL</label><input class="form-input" id="wh-url" placeholder="https://your-siem/endpoint" oninput="saveSiemDebounced()"></div>
+          <div class="form-row"><label>Token / API key</label><input class="form-input" id="wh-token" type="password" placeholder="••••••••" oninput="saveSiemDebounced()"></div>
+          <div id="wh-save-status"></div>
+        </div>
+        <div class="form-card">
+          <h3>📨 Syslog</h3>
+          <div class="toggle-row"><label>Enable syslog forwarding</label><label class="toggle"><input type="checkbox" id="sl-enabled" onchange="saveSiem()"><span class="toggle-slider"></span></label></div>
+          <div class="form-row"><label>Host / IP</label><input class="form-input" id="sl-host" placeholder="10.0.0.1" oninput="saveSiemDebounced()"></div>
+          <div class="form-row"><label>Port</label><input class="form-input" id="sl-port" type="number" value="514" oninput="saveSiemDebounced()"></div>
+          <div class="form-row"><label>Protocol</label><select class="form-select" id="sl-proto" onchange="saveSiem()"><option value="udp">UDP (RFC 5424)</option><option value="tcp">TCP</option></select></div>
+        </div>
+      </div>
+      <div class="form-card" style="margin-bottom:16px">
+        <h3>⚡ Real-time Forwarding</h3>
+        <div class="toggle-row"><label>Forward incoming sensor events to SIEM in real-time</label><label class="toggle"><input type="checkbox" id="rt-enabled" onchange="saveSiem()"><span class="toggle-slider"></span></label></div>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="testSiem()">⚡ Send Test Event</button>
+          <button class="btn btn-primary" onclick="forwardBatch()">📤 Forward Last 500 Events</button>
+        </div>
+        <div id="siem-test-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- EXPORT -->
+    <div id="view-export" class="view">
+      <div class="form-card" style="max-width:600px">
+        <h3>💾 Export Log Data</h3>
+        <p style="color:var(--muted);font-size:.82rem;margin-bottom:20px">Download all parsed events. Optionally filter by sensor. Exports up to 50,000 records.</p>
+        <div class="form-row"><label>Filter by sensor (optional)</label>
+          <select class="form-select" id="export-sensor"><option value="">All sensors</option></select>
+        </div>
+        <div class="btn-row" style="gap:12px">
+          <button class="btn btn-primary" onclick="doExport('json')">⬇ Download JSON</button>
+          <button class="btn btn-outline" onclick="doExport('csv')">⬇ Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="view-settings" class="view">
+      <div class="settings-grid">
+        <div class="form-card">
+          <h3>🔐 Change Password</h3>
+          <div class="form-row"><label>New password (min 8 chars)</label><input class="form-input" type="password" id="new-pw" placeholder="New password"></div>
+          <div class="form-row"><label>Confirm</label><input class="form-input" type="password" id="confirm-pw" placeholder="Confirm password"></div>
+          <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+          <div id="pw-result" style="margin-top:12px"></div>
+        </div>
+        <div class="form-card">
+          <h3>ℹ️ System Info</h3>
+          <div style="font-size:.82rem;line-height:2">
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0"><span style="color:var(--muted)">Total events</span><span class="mono" id="info-total">—</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0"><span style="color:var(--muted)">Unique IPs</span><span class="mono" id="info-ips">—</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0"><span style="color:var(--muted)">Registered sensors</span><span class="mono" id="info-sensors">—</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--muted)">Sensor API endpoint</span><span class="mono" style="color:var(--green);font-size:.72rem">POST /api/sensor/events</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ADD SENSOR MODAL -->
+<div id="modal-add" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2>📡 Register New Sensor</h2>
+    <div class="form-row"><label>Sensor ID (lowercase, hyphens ok)</label><input class="form-input" id="m-id" placeholder="nyc-dc-01" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_-]/g,'-')"></div>
+    <div class="form-row"><label>Display name</label><input class="form-input" id="m-name" placeholder="NYC Datacenter"></div>
+    <div class="form-row"><label>Description (optional)</label><input class="form-input" id="m-desc" placeholder="Cloud droplet, port 22 exposed"></div>
+    <div id="m-result" style="display:none">
+      <div class="alert alert-success" style="margin-bottom:12px">✓ Sensor registered. Copy the deploy command below — the API key is shown only once.</div>
+      <pre class="cmd" id="m-cmd"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" id="m-create-btn" onclick="createSensor()">Create Sensor</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== State ====================
+let eventsPage = 1;
+let allCreds   = [];
+let statsData  = {};
+let allSensors = [];
+let chartTimeline, chartServices, chartEvents;
+let mapInstance, attackerCluster, mapLoaded = false;
+let siemSaveTimer = null;
+
+// ==================== View ====================
+function showView(name, el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if(el) el.classList.add('active');
+  document.getElementById('page-title').textContent = el ? el.textContent.trim() : name;
+  if(name==='map')         initMap();
+  if(name==='events')      loadEvents(1);
+  if(name==='credentials') loadCredentials();
+  if(name==='siem')        loadSiemConfig();
+  if(name==='sensors')     loadSensors();
+}
+
+// ==================== API ====================
+async function api(path){
+  const r=await fetch(path);
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function apiPost(path,body){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function apiPatch(path,body){
+  const r=await fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function apiDelete(path){
+  const r=await fetch(path,{method:'DELETE'});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ==================== Refresh ====================
+async function refreshAll(){
+  document.getElementById('refresh-btn').textContent='⟳ …';
+  try{
+    const [stats, sensors] = await Promise.all([api('/api/stats'), api('/api/sensors')]);
+    statsData  = stats;
+    allSensors = sensors;
+    renderStats(stats);
+    renderCharts(stats);
+    renderTopLists(stats);
+    const online = sensors.filter(s=>s.status==='online').length;
+    document.getElementById('tb-events').textContent  = fmt(stats.total_events);
+    document.getElementById('tb-ips').textContent     = fmt(stats.unique_ips);
+    document.getElementById('tb-creds').textContent   = fmt(stats.credentials_captured);
+    document.getElementById('tb-sensors').textContent = `${online}/${sensors.length}`;
+    document.getElementById('s-sensors').textContent  = online;
+    document.getElementById('cred-badge').textContent = stats.credentials_captured;
+    document.getElementById('online-badge').textContent = online;
+    document.getElementById('info-total').textContent   = fmt(stats.total_events);
+    document.getElementById('info-ips').textContent     = fmt(stats.unique_ips);
+    document.getElementById('info-sensors').textContent = sensors.length;
+    populateSensorDropdowns(sensors);
+    document.getElementById('last-updated').textContent='Updated: '+new Date().toLocaleTimeString();
+  }catch(e){console.error(e)}
+  document.getElementById('refresh-btn').textContent='⟳ Refresh';
+}
+
+function fmt(n){return n==null?'—':Number(n).toLocaleString()}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function populateSensorDropdowns(sensors){
+  ['f-sensor','export-sensor'].forEach(id=>{
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    while(sel.options.length>1) sel.remove(1);
+    sensors.forEach(s=>{
+      const o = new Option(`${s.name} (${s.id})`, s.id);
+      sel.add(o);
+    });
+    sel.value = cur;
+  });
+}
+
+// ==================== Stats ====================
+function renderStats(d){
+  animCount('s-total', d.total_events);
+  animCount('s-ips',   d.unique_ips);
+  animCount('s-creds', d.credentials_captured);
+  animCount('s-ioc',   d.ioc_matches);
+}
+function animCount(id,target){
+  const el=document.getElementById(id);
+  const start=parseInt(el.textContent.replace(/,/g,''))||0;
+  const dur=600,step=16; let t=0;
+  const tmr=setInterval(()=>{t+=step;const p=Math.min(t/dur,1);el.textContent=fmt(Math.round(start+(target-start)*p));if(p>=1)clearInterval(tmr)},step);
+}
+
+// ==================== Charts ====================
+const PAL=['#00d4ff','#00ff88','#a78bfa','#ffa502','#ff4757','#2ed573','#eccc68','#70a1ff'];
+function renderCharts(d){
+  if(chartTimeline) chartTimeline.destroy();
+  chartTimeline=new Chart(document.getElementById('chart-timeline'),{type:'line',
+    data:{labels:(d.timeline||[]).map(x=>x[0].replace('T',' ')),
+          datasets:[{label:'Events',data:(d.timeline||[]).map(x=>x[1]),
+            borderColor:'#00d4ff',backgroundColor:'rgba(0,212,255,.07)',tension:.3,fill:true,pointRadius:2}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#4a6fa5',maxRotation:45,font:{size:10}},grid:{color:'#1a2f50'}},y:{ticks:{color:'#4a6fa5',font:{size:10}},grid:{color:'#1a2f50'}}},animation:{duration:600}}
+  });
+  if(chartServices) chartServices.destroy();
+  const sk=Object.keys(d.services||{});
+  chartServices=new Chart(document.getElementById('chart-services'),{type:'doughnut',
+    data:{labels:sk,datasets:[{data:sk.map(k=>d.services[k]),backgroundColor:PAL,borderWidth:0,hoverOffset:6}]},
+    options:{plugins:{legend:{labels:{color:'#cdd6f4',font:{size:11}}}},animation:{duration:600}}
+  });
+  if(chartEvents) chartEvents.destroy();
+  const ek=Object.keys(d.event_types||{});
+  chartEvents=new Chart(document.getElementById('chart-events'),{type:'bar',
+    data:{labels:ek,datasets:[{label:'Count',data:ek.map(k=>d.event_types[k]),backgroundColor:PAL,borderRadius:4}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#4a6fa5',font:{size:10}},grid:{color:'#1a2f50'}},y:{ticks:{color:'#cdd6f4',font:{size:10}},grid:{display:false}}},animation:{duration:600}}
+  });
+}
+
+// ==================== Top lists ====================
+function renderTopLists(d){
+  renderList('top-countries',d.countries||[]);
+  renderList('top-ips',d.top_ips||[],true);
+  renderList('top-users',d.top_usernames||[]);
+  renderList('top-passwords',d.top_passwords||[]);
+}
+function renderList(id,items,isIP){
+  const el=document.getElementById(id);
+  if(!items.length){el.innerHTML='<div class="no-data">No data</div>';return}
+  const max=items[0][1];
+  el.innerHTML=items.slice(0,12).map(([label,count])=>`
+    <div class="list-row">
+      <span class="lval" ${isIP?`onclick="filterByIP('${label}')" style="cursor:pointer"`:''}>${esc(label)}</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(count/max*100)}%"></div></div>
+      <span class="lcount">${fmt(count)}</span>
+    </div>`).join('');
+}
+function filterByIP(ip){
+  showView('events',document.querySelector('[data-view="events"]'));
+  document.getElementById('f-ip').value=ip; loadEvents(1);
+}
+
+// ==================== Sensors fleet ====================
+async function loadSensors(){
+  try{
+    const sensors=await api('/api/sensors');
+    allSensors=sensors;
+    const grid=document.getElementById('sensor-grid');
+    if(!sensors.length){grid.innerHTML='<div class="no-data">No sensors registered yet. Click "Add Sensor" to get started.</div>';return}
+    grid.innerHTML=sensors.map(s=>`
+      <div class="sensor-card ${s.status}" data-id="${s.id}">
+        <div class="sc-header">
+          <div>
+            <div class="sc-name">${esc(s.name)}</div>
+            <div class="sc-id">${s.id}</div>
+          </div>
+          <span class="pill ${s.status==='online'?'pill-online':'pill-offline'}">
+            ${s.status==='online'?'● Online':'○ Offline'}
+          </span>
+        </div>
+        <div class="sc-meta">
+          <span class="k">Events</span><span class="v">${fmt(s.event_count)}</span>
+          <span class="k">Last IP</span><span class="v">${s.last_ip||'—'}</span>
+          <span class="k">Last seen</span><span class="v">${s.last_seen?s.last_seen.replace('T',' ').slice(0,16)+'Z':'—'}</span>
+          <span class="k">Location</span><span class="v">${esc(s.location_label||'—')}</span>
+        </div>
+        ${s.id!=='local'?`<div class="sc-actions">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:.72rem" onclick="editSensor('${s.id}')">Edit</button>
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:.72rem" onclick="rotateKey('${s.id}')">Rotate Key</button>
+          <button class="btn btn-danger" style="padding:5px 10px;font-size:.72rem" onclick="deleteSensor('${s.id}')">Delete</button>
+        </div>`:''}
+      </div>`).join('');
+
+    // Table
+    document.getElementById('sensors-tbody').innerHTML=sensors.map(s=>`
+      <tr>
+        <td>${s.id}</td><td>${esc(s.name)}</td>
+        <td><span class="pill ${s.status==='online'?'pill-online':'pill-offline'}">${s.status}</span></td>
+        <td>${s.last_seen?s.last_seen.replace('T',' ').slice(0,19)+'Z':'—'}</td>
+        <td>${s.last_ip||'—'}</td>
+        <td>${fmt(s.event_count)}</td>
+        <td style="font-size:.72rem">${(JSON.parse(s.services||'[]')).join(', ')||'—'}</td>
+        <td>
+          ${s.id!=='local'?`<button class="btn btn-outline" style="padding:3px 8px;font-size:.7rem" onclick="filterBySensor('${s.id}')">View Events</button>`:'—'}
+        </td>
+      </tr>`).join('');
+  }catch(e){console.error(e)}
+}
+function filterBySensor(sid){
+  showView('events',document.querySelector('[data-view="events"]'));
+  document.getElementById('f-sensor').value=sid; loadEvents(1);
+}
+async function deleteSensor(sid){
+  if(!confirm(`Delete sensor "${sid}" and all its events? This cannot be undone.`)) return;
+  try{ await apiDelete(`/api/sensors/${sid}`); loadSensors(); }
+  catch(e){ alert('Delete failed: '+e.message) }
+}
+async function rotateKey(sid){
+  if(!confirm(`Rotate API key for "${sid}"? The old key will stop working immediately.`)) return;
+  try{
+    const r=await apiPost(`/api/sensors/${sid}/rotate-key`,{});
+    alert(`New deploy command:\n\n${r.deploy_cmd}\n\nUpdate your sensor configuration.`);
+  }catch(e){ alert('Failed: '+e.message) }
+}
+async function editSensor(sid){
+  const s=allSensors.find(x=>x.id===sid);
+  if(!s) return;
+  const label=prompt('Location label (e.g. "NYC DC"):',s.location_label||'');
+  if(label===null) return;
+  const lat=prompt('Latitude (for map, leave blank to skip):',s.location_lat||'');
+  const lon=prompt('Longitude (for map, leave blank to skip):',s.location_lon||'');
+  try{
+    await apiPatch(`/api/sensors/${sid}`,{
+      location_label:label,
+      ...(lat?{location_lat:parseFloat(lat)}:{}),
+      ...(lon?{location_lon:parseFloat(lon)}:{}),
+    });
+    loadSensors();
+    showMsg('dummy','Sensor updated','success');
+  }catch(e){ alert('Failed: '+e.message) }
+}
+
+// ==================== Add Sensor Modal ====================
+function openAddSensor(){ document.getElementById('modal-add').style.display='flex'; document.getElementById('m-id').focus(); document.getElementById('m-result').style.display='none'; document.getElementById('m-create-btn').disabled=false; }
+function closeModal(){ document.getElementById('modal-add').style.display='none'; loadSensors(); }
+async function createSensor(){
+  const id   = document.getElementById('m-id').value.trim();
+  const name = document.getElementById('m-name').value.trim() || id;
+  const desc = document.getElementById('m-desc').value.trim();
+  if(!id){ alert('Sensor ID is required'); return }
+  document.getElementById('m-create-btn').disabled=true;
+  try{
+    const r=await apiPost('/api/sensors',{id,name,description:desc});
+    document.getElementById('m-cmd').textContent=r.deploy_cmd;
+    document.getElementById('m-result').style.display='block';
+  }catch(e){
+    alert('Failed: '+e.message);
+    document.getElementById('m-create-btn').disabled=false;
+  }
+}
+
+// ==================== Map ====================
+async function initMap(){
+  if(mapLoaded) return; mapLoaded=true;
+  mapInstance=L.map('map',{zoomControl:true,attributionControl:false}).setView([20,0],2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(mapInstance);
+
+  attackerCluster=L.markerClusterGroup({
+    iconCreateFunction:cls=>{
+      const c=cls.getChildCount();
+      return L.divIcon({html:`<div style="background:rgba(255,71,87,.2);border:2px solid var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--red);font-weight:700;font-size:11px;font-family:monospace;box-shadow:0 0 12px rgba(255,71,87,.3)">${c}</div>`,className:'',iconSize:[c>100?44:c>20?36:28,c>100?44:c>20?36:28]});
+    }
+  });
+
+  try{
+    const {attackers, sensors}=await api('/api/geo');
+    // Attacker markers
+    attackers.forEach(m=>{
+      const icon=L.divIcon({html:`<div style="width:10px;height:10px;background:var(--red);border:2px solid #ff8a8a;border-radius:50%;box-shadow:0 0 8px rgba(255,71,87,.6)"></div>`,className:'',iconSize:[10,10],iconAnchor:[5,5]});
+      const mk=L.marker([m.lat,m.lon],{icon});
+      mk.bindPopup(`<div class="map-popup"><div class="ip">${m.ip}</div>
+        <div class="row"><span class="k">Country</span><span>${m.country||'—'}</span></div>
+        <div class="row"><span class="k">City</span><span>${m.city||'—'}</span></div>
+        <div class="row"><span class="k">Org</span><span>${m.org||'—'}</span></div>
+        <div class="row"><span class="k">Hits</span><span style="color:var(--red);font-weight:700">${fmt(m.count)}</span></div>
+      </div>`);
+      attackerCluster.addLayer(mk);
+    });
+    mapInstance.addLayer(attackerCluster);
+
+    // Sensor deployment markers (cyan diamonds)
+    sensors.forEach(s=>{
+      const icon=L.divIcon({html:`<div style="width:14px;height:14px;background:var(--accent);transform:rotate(45deg);border:2px solid #fff;box-shadow:0 0 10px rgba(0,212,255,.8)"></div>`,className:'',iconSize:[14,14],iconAnchor:[7,7]});
+      const mk=L.marker([s.lat,s.lon],{icon,zIndexOffset:1000});
+      mk.bindPopup(`<div class="map-popup">
+        <div class="sid">📡 ${s.id}</div>
+        <div class="row"><span class="k">Label</span><span>${s.label||'—'}</span></div>
+        <div class="row"><span class="k">Status</span><span style="color:${s.status==='online'?'var(--green)':'var(--muted)'}">${s.status}</span></div>
+      </div>`);
+      mk.addTo(mapInstance);
+    });
+
+    if(!attackers.length && !sensors.length){
+      document.getElementById('map').insertAdjacentHTML('beforeend','<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:999;color:#4a6fa5;text-align:center;pointer-events:none"><div style="font-size:2rem">🌍</div><div>No geo data yet</div></div>');
+    }
+  }catch(e){console.error('Map error:',e)}
+}
+
+// ==================== Events ====================
+async function loadEvents(page){
+  eventsPage=page||1;
+  const ip=document.getElementById('f-ip').value.trim();
+  const svc=document.getElementById('f-service').value;
+  const evt=document.getElementById('f-event').value;
+  const sid=document.getElementById('f-sensor').value;
+  const url=`/api/events?page=${eventsPage}&per_page=50&ip=${encodeURIComponent(ip)}&service=${svc}&event=${evt}&sensor_id=${sid}`;
+  document.getElementById('events-tbody').innerHTML='<tr><td colspan="7" class="loading">Loading…</td></tr>';
+  try{
+    const d=await api(url);
+    document.getElementById('events-tbody').innerHTML=d.events.map(e=>`<tr>
+      <td>${(e.timestamp||'').replace('T',' ').replace(/\+.*/,'').slice(0,19)}</td>
+      <td><span class="pill pill-blue" style="font-size:.65rem">${esc(e.sensor_name||e.sensor_id||'?')}</span></td>
+      <td><span class="badge badge-${(e.service||'').toLowerCase()}">${e.service||'?'}</span></td>
+      <td><span class="ip-link" onclick="filterByIP('${e.src_ip}')">${e.src_ip||'—'}</span></td>
+      <td><span class="badge badge-${evtClass(e.event)}">${e.event||'?'}</span></td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${evtDetail(e)}</td>
+      <td>${e.ioc_match?'<span class="badge badge-ioc">⚠ IOC</span>':''}</td>
+    </tr>`).join('')||'<tr><td colspan="7" class="no-data">No events found</td></tr>';
+    document.getElementById('events-page-info').textContent=`Page ${d.page}/${d.pages} (${fmt(d.total)})`;
+    document.getElementById('events-prev').disabled=d.page<=1;
+    document.getElementById('events-next').disabled=d.page>=d.pages;
+  }catch(e){document.getElementById('events-tbody').innerHTML='<tr><td colspan="7" class="no-data">Error</td></tr>'}
+}
+function evtClass(t){if(t==='credential_capture')return 'cred';if(t==='request')return 'req';return 'conn'}
+function evtDetail(e){
+  if(e.event==='credential_capture') return `user=${esc(e.username||'')} pass=${esc(e.password||'')}`;
+  if(e.event==='request') return `${e.method||''} ${esc(e.path||'')}`;
+  return esc(e.user_agent||e.path||'');
+}
+
+// ==================== Credentials ====================
+async function loadCredentials(){
+  document.getElementById('creds-tbody').innerHTML='<tr><td colspan="8" class="loading">Loading…</td></tr>';
+  try{
+    allCreds=await api('/api/credentials');
+    renderCreds(allCreds);
+  }catch(e){document.getElementById('creds-tbody').innerHTML='<tr><td colspan="8" class="no-data">Error</td></tr>'}
+}
+function filterCreds(){
+  const q=document.getElementById('cred-search').value.toLowerCase();
+  renderCreds(allCreds.filter(e=>(e.username||'').toLowerCase().includes(q)||(e.password||'').toLowerCase().includes(q)||(e.src_ip||'').includes(q)));
+}
+function renderCreds(items){
+  document.getElementById('creds-tbody').innerHTML=items.slice(0,500).map(e=>`<tr>
+    <td>${(e.timestamp||'').replace('T',' ').replace(/\+.*/,'').slice(0,19)}</td>
+    <td><span class="pill pill-blue" style="font-size:.65rem">${esc(e.sensor_name||e.sensor_id||'?')}</span></td>
+    <td><span class="badge badge-${(e.service||'').toLowerCase()}">${e.service||'?'}</span></td>
+    <td><span class="ip-link" onclick="filterByIP('${e.src_ip}')">${e.src_ip||'—'}</span></td>
+    <td>${esc(e.geo_country||'—')}</td>
+    <td style="color:#ff8a8a">${esc(e.username||'')}</td>
+    <td style="color:#ffa502">${esc(e.password||'')}</td>
+    <td style="color:var(--muted);font-size:.75rem">${esc(e.path||'')}</td>
+  </tr>`).join('')||'<tr><td colspan="8" class="no-data">No credentials captured yet</td></tr>';
+}
+
+// ==================== SIEM ====================
+async function loadSiemConfig(){
+  try{
+    const d=await api('/api/siem');
+    document.getElementById('wh-enabled').checked=!!d.webhook_enabled;
+    document.getElementById('wh-type').value=d.webhook_type||'generic';
+    document.getElementById('wh-url').value=d.webhook_url||'';
+    if(d.webhook_token_set) document.getElementById('wh-token').placeholder='(saved)';
+    document.getElementById('sl-enabled').checked=!!d.syslog_enabled;
+    document.getElementById('sl-host').value=d.syslog_host||'';
+    document.getElementById('sl-port').value=d.syslog_port||514;
+    document.getElementById('sl-proto').value=d.syslog_proto||'udp';
+    document.getElementById('rt-enabled').checked=!!d.realtime_forward;
+  }catch(e){console.error(e)}
+}
+async function saveSiem(){
+  const token=document.getElementById('wh-token').value;
+  const body={
+    webhook_enabled:document.getElementById('wh-enabled').checked,
+    webhook_type:document.getElementById('wh-type').value,
+    webhook_url:document.getElementById('wh-url').value,
+    syslog_enabled:document.getElementById('sl-enabled').checked,
+    syslog_host:document.getElementById('sl-host').value,
+    syslog_port:parseInt(document.getElementById('sl-port').value)||514,
+    syslog_proto:document.getElementById('sl-proto').value,
+    realtime_forward:document.getElementById('rt-enabled').checked,
+  };
+  if(token) body.webhook_token=token;
+  try{await apiPost('/api/siem',body); showMsg('wh-save-status','✓ Saved','success')}
+  catch(e){showMsg('wh-save-status','Save failed','error')}
+}
+function saveSiemDebounced(){clearTimeout(siemSaveTimer);siemSaveTimer=setTimeout(saveSiem,800)}
+async function testSiem(){
+  document.getElementById('siem-test-result').innerHTML='<span style="color:var(--muted)">Sending…</span>';
+  try{
+    const r=await apiPost('/api/siem/test',{});
+    const parts=Object.entries(r).map(([k,v])=>`${k}: ${v?'✓ OK':'✗ Failed'}`);
+    showMsg('siem-test-result',parts.length?parts.join(' | '):'No SIEM configured',Object.values(r).every(v=>v)?'success':'error');
+  }catch(e){showMsg('siem-test-result','Error: '+e.message,'error')}
+}
+async function forwardBatch(){
+  try{const r=await apiPost('/api/forward-batch',{count:500});showMsg('siem-test-result',`Forwarded ${r.forwarded} (${r.errors} errors)`,'success')}
+  catch(e){showMsg('siem-test-result','Error: '+e.message,'error')}
+}
+function showMsg(id,msg,type){
+  const el=document.getElementById(id);
+  if(el) el.innerHTML=`<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(()=>{const e=document.getElementById(id);if(e)e.innerHTML=''},5000);
+}
+
+// ==================== Export ====================
+function doExport(fmt){
+  const sid=document.getElementById('export-sensor').value;
+  window.location=`/api/export?format=${fmt}&sensor_id=${sid}`;
+}
+
+// ==================== Password ====================
+async function changePassword(){
+  const pw=document.getElementById('new-pw').value;
+  const cp=document.getElementById('confirm-pw').value;
+  if(pw!==cp){showMsg('pw-result','Passwords do not match','error');return}
+  try{await apiPost('/api/change-password',{password:pw});showMsg('pw-result','Password updated','success');document.getElementById('new-pw').value='';document.getElementById('confirm-pw').value=''}
+  catch(e){showMsg('pw-result','Error: '+e.message,'error')}
+}
+
+// ==================== Auto-refresh ====================
+setInterval(()=>{
+  if(document.getElementById('view-overview').classList.contains('active')) refreshAll();
+  if(document.getElementById('view-sensors').classList.contains('active')) loadSensors();
+}, 30000);
+
+// ==================== Init ====================
+Chart.defaults.color='#4a6fa5';
+Chart.defaults.borderColor='#1a2f50';
+refreshAll();
+</script>
+</body>
+</html>

@@ -17,3 +17,4 @@ rdp_key.pem
 __pycache__/
 *.py[cod]
 .venv/
+rockyou.txt

@@ -18,3 +18,12 @@ __pycache__/
 *.py[cod]
 .venv/
 rockyou.txt
+# Runtime data — never commit
+*.db
+*.db-shm
+*.db-wal
+*.log
+geo_cache.json
+dashboard_config.json
+rdp_cert.pem
+rdp_key.pem

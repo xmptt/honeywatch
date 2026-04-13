@@ -27,3 +27,5 @@ geo_cache.json
 dashboard_config.json
 rdp_cert.pem
 rdp_key.pem
+dashboard.pid
+dashboard_server.log

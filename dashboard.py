@@ -518,8 +518,27 @@ def api_sensors_update(sensor_id):
     allowed = {"name","description","notes","location_lat","location_lon","location_label"}
     for k, v in data.items():
         if k in allowed:
+            # Guard against NaN / non-finite floats which break JSON
+            if isinstance(v, float):
+                import math
+                if not math.isfinite(v):
+                    continue
             db_write(f"UPDATE sensors SET {k}=? WHERE id=?", (v, sensor_id))
     return jsonify({"status":"updated"})
+
+# Sensor polls this to pick up config changes (name rename, notes, etc.)
+@app.route("/api/sensor/config", methods=["GET"])
+@sensor_auth
+def sensor_config(sensor):
+    row = db_one("SELECT name, notes, location_label FROM sensors WHERE id=?", (sensor["id"],))
+    if not row:
+        return jsonify({"error":"not found"}), 404
+    return jsonify({
+        "sensor_id":      sensor["id"],
+        "name":           row["name"],
+        "notes":          row["notes"] or "",
+        "location_label": row["location_label"] or "",
+    })
 
 @app.route("/api/sensors/<sensor_id>", methods=["DELETE"])
 @api_auth

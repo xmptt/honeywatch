@@ -190,6 +190,12 @@ def _post(path, body):
     with urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 
+def _get(path):
+    url = SERVER_URL.rstrip("/") + path
+    req = Request(url, headers={"Authorization": f"Bearer {API_KEY}"})
+    with urlopen(req, timeout=10) as r:
+        return json.loads(r.read())
+
 # ---------------------------------------------------------------------------
 # Flush thread  (sends event batches to server every N seconds)
 # ---------------------------------------------------------------------------
@@ -232,6 +238,23 @@ def _heartbeat_worker():
             })
         except Exception as e:
             log.debug(f"Heartbeat failed: {e}")
+
+# ---------------------------------------------------------------------------
+# Config poller — picks up name / label changes made in the dashboard
+# ---------------------------------------------------------------------------
+
+def _config_poller():
+    global SENSOR_NAME
+    while True:
+        time.sleep(60)
+        try:
+            cfg = _get("/api/sensor/config")
+            new_name = cfg.get("name", "")
+            if new_name and new_name != SENSOR_NAME:
+                log.info(f"Sensor name updated by dashboard: '{SENSOR_NAME}' → '{new_name}'")
+                SENSOR_NAME = new_name
+        except Exception as e:
+            log.debug(f"Config poll failed: {e}")
 
 # ---------------------------------------------------------------------------
 # Registration  (blocking retry on startup)
@@ -568,6 +591,7 @@ def main():
     # Start background workers
     threading.Thread(target=_flush_worker,     daemon=True, name="flusher").start()
     threading.Thread(target=_heartbeat_worker, daemon=True, name="heartbeat").start()
+    threading.Thread(target=_config_poller,   daemon=True, name="config-poll").start()
 
     # Start honeypot services
     if not args.no_ssh:    start_tcp_server(args.ssh_port,    handle_ssh,    "SSH")

@@ -429,6 +429,26 @@ pre.cmd{background:#0a1628;border:1px solid var(--border);border-radius:8px;padd
   </div><!-- /content -->
 </div><!-- /main -->
 
+<!-- EDIT SENSOR MODAL -->
+<div id="modal-edit" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <h2>✏️ Edit Sensor</h2>
+    <input type="hidden" id="e-id">
+    <div class="form-row"><label>Display name</label><input class="form-input" id="e-name" placeholder="NYC Datacenter"><small style="color:var(--muted);font-size:.72rem">The sensor picks this up automatically within 60 seconds.</small></div>
+    <div class="form-row"><label>Location label</label><input class="form-input" id="e-label" placeholder="NYC DC, Rack 3"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-row"><label>Latitude</label><input class="form-input" id="e-lat" placeholder="51.5074"></div>
+      <div class="form-row"><label>Longitude</label><input class="form-input" id="e-lon" placeholder="-0.1278"></div>
+    </div>
+    <div class="form-row"><label>Notes</label><input class="form-input" id="e-notes" placeholder="Any notes about this sensor..."></div>
+    <div id="e-result"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditSensor()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD SENSOR MODAL -->
 <div id="modal-add" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -659,22 +679,41 @@ async function rotateKey(sid){
     alert(`New deploy command:\n\n${r.deploy_cmd}\n\nUpdate your sensor configuration.`);
   }catch(e){ alert('Failed: '+e.message) }
 }
-async function editSensor(sid){
+function editSensor(sid){
   const s=allSensors.find(x=>x.id===sid);
   if(!s) return;
-  const label=prompt('Location label (e.g. "NYC DC"):',s.location_label||'');
-  if(label===null) return;
-  const lat=prompt('Latitude (for map, leave blank to skip):',s.location_lat||'');
-  const lon=prompt('Longitude (for map, leave blank to skip):',s.location_lon||'');
+  // Populate edit modal
+  document.getElementById('e-id').value        = s.id;
+  document.getElementById('e-name').value      = s.name||'';
+  document.getElementById('e-label').value     = s.location_label||'';
+  document.getElementById('e-lat').value       = s.location_lat||'';
+  document.getElementById('e-lon').value       = s.location_lon||'';
+  document.getElementById('e-notes').value     = s.notes||'';
+  document.getElementById('e-result').innerHTML= '';
+  document.getElementById('modal-edit').style.display='flex';
+  document.getElementById('e-name').focus();
+}
+function closeEditModal(){ document.getElementById('modal-edit').style.display='none'; }
+async function saveEditSensor(){
+  const sid   = document.getElementById('e-id').value;
+  const name  = document.getElementById('e-name').value.trim();
+  const label = document.getElementById('e-label').value.trim();
+  const latRaw= document.getElementById('e-lat').value.trim();
+  const lonRaw= document.getElementById('e-lon').value.trim();
+  const notes = document.getElementById('e-notes').value.trim();
+  const lat   = latRaw !== '' ? parseFloat(latRaw) : null;
+  const lon   = lonRaw !== '' ? parseFloat(lonRaw) : null;
+  // Validate
+  if(latRaw !== '' && (isNaN(lat)||lat<-90||lat>90)){ showMsg('e-result','Invalid latitude (must be -90 to 90)','error'); return; }
+  if(lonRaw !== '' && (isNaN(lon)||lon<-180||lon>180)){ showMsg('e-result','Invalid longitude (must be -180 to 180)','error'); return; }
+  const body = { name, notes, location_label: label };
+  if(lat !== null) body.location_lat = lat;
+  if(lon !== null) body.location_lon = lon;
   try{
-    await apiPatch(`/api/sensors/${sid}`,{
-      location_label:label,
-      ...(lat?{location_lat:parseFloat(lat)}:{}),
-      ...(lon?{location_lon:parseFloat(lon)}:{}),
-    });
-    loadSensors();
-    showMsg('dummy','Sensor updated','success');
-  }catch(e){ alert('Failed: '+e.message) }
+    await apiPatch(`/api/sensors/${sid}`, body);
+    showMsg('e-result','✓ Saved — sensor will pick up new name within 60s','success');
+    setTimeout(()=>{ closeEditModal(); loadSensors(); refreshAll(); }, 1500);
+  }catch(e){ showMsg('e-result','Failed: '+e.message,'error'); }
 }
 
 // ==================== Add Sensor Modal ====================

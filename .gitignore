@@ -29,3 +29,6 @@ rdp_cert.pem
 rdp_key.pem
 dashboard.pid
 dashboard_server.log
+*.pid
+honeypot_server.log
+dashboard_server.log
